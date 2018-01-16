@@ -2,48 +2,49 @@ package modl
 
 import (
 	"reflect"
+	"context"
 )
 
 // PreInserter is an interface used to determine if a table type implements
 // a PreInsert hook
 type PreInserter interface {
-	PreInsert(SqlExecutor) error
+	PreInsert(context.Context, SqlExecutor) error
 }
 
 // PostInserter is an interface used to determine if a table type implements
 // a PostInsert hook
 type PostInserter interface {
-	PostInsert(SqlExecutor) error
+	PostInsert(context.Context, SqlExecutor) error
 }
 
 // PostGetter is an interface used to determine if a table type implements
 // a PostGet hook
 type PostGetter interface {
-	PostGet(SqlExecutor) error
+	PostGet(context.Context, SqlExecutor) error
 }
 
 // PreUpdater is an interface used to determine if a table type implements
 // a PreUpdate hook
 type PreUpdater interface {
-	PreUpdate(SqlExecutor) error
+	PreUpdate(context.Context, SqlExecutor) error
 }
 
 // PostUpdater is an interface used to determine if a table type implements
 // a PostUpdate hook
 type PostUpdater interface {
-	PostUpdate(SqlExecutor) error
+	PostUpdate(context.Context, SqlExecutor) error
 }
 
 // PreDeleter is an interface used to determine if a table type implements
 // a PreDelete hook
 type PreDeleter interface {
-	PreDelete(SqlExecutor) error
+	PreDelete(context.Context, SqlExecutor) error
 }
 
 // PostDeleter is an interface used to determine if a table type implements
 // a PostDelete hook
 type PostDeleter interface {
-	PostDelete(SqlExecutor) error
+	PostDelete(context.Context, SqlExecutor) error
 }
 
 // Determine which hooks are supported by the mapper struct i

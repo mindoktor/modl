@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"context"
 )
 
 // NoKeysErr is a special error type returned when modl's CRUD helpers are
@@ -113,13 +114,14 @@ type bindInstance struct {
 // See the DbMap function docs for each of the functions below for more
 // information.
 type SqlExecutor interface {
-	Get(dest interface{}, keys ...interface{}) error
-	Insert(list ...interface{}) error
-	Update(list ...interface{}) (int64, error)
-	Delete(list ...interface{}) (int64, error)
-	Exec(query string, args ...interface{}) (sql.Result, error)
-	Select(dest interface{}, query string, args ...interface{}) error
-	SelectOne(dest interface{}, query string, args ...interface{}) error
+	GetContext(ctx context.Context, dest interface{}, keys ...interface{}) error
+	InsertContext(ctx context.Context, list ...interface{}) error
+	UpdateContext(ctx context.Context, list ...interface{}) (int64, error)
+	DeleteContext(ctx context.Context, list ...interface{}) (int64, error)
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+	SelectOneContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+
 	handle() handle
 }
 
@@ -132,8 +134,8 @@ var (
 
 ///////////////
 
-func hookedget(m *DbMap, e SqlExecutor, dest interface{}, query string, args ...interface{}) error {
-	err := e.handle().Get(dest, query, args...)
+func hookedget(ctx context.Context, m *DbMap, e SqlExecutor, dest interface{}, query string, args ...interface{}) error {
+	err := e.handle().GetContext(ctx, dest, query, args...)
 	if err != nil {
 		return err
 	}
@@ -141,7 +143,7 @@ func hookedget(m *DbMap, e SqlExecutor, dest interface{}, query string, args ...
 	table := m.TableFor(dest)
 
 	if table != nil && table.CanPostGet {
-		err = dest.(PostGetter).PostGet(e)
+		err = dest.(PostGetter).PostGet(ctx, e)
 		if err != nil {
 			return err
 		}
@@ -149,9 +151,9 @@ func hookedget(m *DbMap, e SqlExecutor, dest interface{}, query string, args ...
 	return nil
 }
 
-func hookedselect(m *DbMap, e SqlExecutor, dest interface{}, query string, args ...interface{}) error {
+func hookedselect(ctx context.Context, m *DbMap, e SqlExecutor, dest interface{}, query string, args ...interface{}) error {
 
-	err := e.handle().Select(dest, query, args...)
+	err := e.handle().SelectContext(ctx, dest, query, args...)
 	if err != nil {
 		return err
 	}
@@ -168,7 +170,7 @@ func hookedselect(m *DbMap, e SqlExecutor, dest interface{}, query string, args 
 		l := v.Len()
 		for i := 0; i < l; i++ {
 			x = v.Index(i).Interface()
-			err = x.(PostGetter).PostGet(e)
+			err = x.(PostGetter).PostGet(ctx, e)
 			if err != nil {
 				return err
 			}
@@ -178,7 +180,7 @@ func hookedselect(m *DbMap, e SqlExecutor, dest interface{}, query string, args 
 	return nil
 }
 
-func get(m *DbMap, e SqlExecutor, dest interface{}, keys ...interface{}) error {
+func get(ctx context.Context, m *DbMap, e SqlExecutor, dest interface{}, keys ...interface{}) error {
 
 	table := m.TableFor(dest)
 
@@ -190,14 +192,14 @@ func get(m *DbMap, e SqlExecutor, dest interface{}, keys ...interface{}) error {
 	}
 
 	plan := table.bindGet()
-	err := e.handle().Get(dest, plan.query, keys...)
+	err := e.handle().GetContext(ctx, dest, plan.query, keys...)
 
 	if err != nil {
 		return err
 	}
 
 	if table.CanPostGet {
-		err = dest.(PostGetter).PostGet(e)
+		err = dest.(PostGetter).PostGet(ctx, e)
 		if err != nil {
 			return err
 		}
@@ -206,7 +208,7 @@ func get(m *DbMap, e SqlExecutor, dest interface{}, keys ...interface{}) error {
 	return nil
 }
 
-func deletes(m *DbMap, e SqlExecutor, list ...interface{}) (int64, error) {
+func deletes(ctx context.Context, m *DbMap, e SqlExecutor, list ...interface{}) (int64, error) {
 	var err error
 	var table *TableMap
 	var elem reflect.Value
@@ -219,7 +221,7 @@ func deletes(m *DbMap, e SqlExecutor, list ...interface{}) (int64, error) {
 		}
 
 		if table.CanPreDelete {
-			err = ptr.(PreDeleter).PreDelete(e)
+			err = ptr.(PreDeleter).PreDelete(ctx, e)
 			if err != nil {
 				return -1, err
 			}
@@ -227,7 +229,7 @@ func deletes(m *DbMap, e SqlExecutor, list ...interface{}) (int64, error) {
 
 		bi := table.bindDelete(elem)
 
-		res, err := e.Exec(bi.query, bi.args...)
+		res, err := e.ExecContext(ctx, bi.query, bi.args...)
 		if err != nil {
 			return -1, err
 		}
@@ -238,13 +240,13 @@ func deletes(m *DbMap, e SqlExecutor, list ...interface{}) (int64, error) {
 		}
 
 		if rows == 0 && bi.existingVersion > 0 {
-			return lockError(m, e, table.TableName, bi.existingVersion, elem, bi.keys...)
+			return lockError(ctx, m, e, table.TableName, bi.existingVersion, elem, bi.keys...)
 		}
 
 		count += rows
 
 		if table.CanPostDelete {
-			err = ptr.(PostDeleter).PostDelete(e)
+			err = ptr.(PostDeleter).PostDelete(ctx, e)
 			if err != nil {
 				return -1, err
 			}
@@ -254,7 +256,7 @@ func deletes(m *DbMap, e SqlExecutor, list ...interface{}) (int64, error) {
 	return count, nil
 }
 
-func update(m *DbMap, e SqlExecutor, list ...interface{}) (int64, error) {
+func update(ctx context.Context, m *DbMap, e SqlExecutor, list ...interface{}) (int64, error) {
 	var err error
 	var table *TableMap
 	var elem reflect.Value
@@ -267,7 +269,7 @@ func update(m *DbMap, e SqlExecutor, list ...interface{}) (int64, error) {
 		}
 
 		if table.CanPreUpdate {
-			err = ptr.(PreUpdater).PreUpdate(e)
+			err = ptr.(PreUpdater).PreUpdate(ctx, e)
 			if err != nil {
 				return -1, err
 			}
@@ -278,7 +280,7 @@ func update(m *DbMap, e SqlExecutor, list ...interface{}) (int64, error) {
 			return -1, err
 		}
 
-		res, err := e.Exec(bi.query, bi.args...)
+		res, err := e.ExecContext(ctx, bi.query, bi.args...)
 		if err != nil {
 			return -1, err
 		}
@@ -289,7 +291,7 @@ func update(m *DbMap, e SqlExecutor, list ...interface{}) (int64, error) {
 		}
 
 		if rows == 0 && bi.existingVersion > 0 {
-			return lockError(m, e, table.TableName,
+			return lockError(ctx, m, e, table.TableName,
 				bi.existingVersion, elem, bi.keys...)
 		}
 
@@ -300,7 +302,7 @@ func update(m *DbMap, e SqlExecutor, list ...interface{}) (int64, error) {
 		count += rows
 
 		if table.CanPostUpdate {
-			err = ptr.(PostUpdater).PostUpdate(e)
+			err = ptr.(PostUpdater).PostUpdate(ctx, e)
 
 			if err != nil {
 				return -1, err
@@ -310,7 +312,7 @@ func update(m *DbMap, e SqlExecutor, list ...interface{}) (int64, error) {
 	return count, nil
 }
 
-func insert(m *DbMap, e SqlExecutor, list ...interface{}) error {
+func insert(ctx context.Context, m *DbMap, e SqlExecutor, list ...interface{}) error {
 	var err error
 	var table *TableMap
 	var elem reflect.Value
@@ -322,7 +324,7 @@ func insert(m *DbMap, e SqlExecutor, list ...interface{}) error {
 		}
 
 		if table.CanPreInsert {
-			err = ptr.(PreInserter).PreInsert(e)
+			err = ptr.(PreInserter).PreInsert(ctx, e)
 			if err != nil {
 				return err
 			}
@@ -343,14 +345,14 @@ func insert(m *DbMap, e SqlExecutor, list ...interface{}) error {
 				return fmt.Errorf("modl: Cannot set autoincrement value on non-Int field. SQL=%s  autoIncrIdx=%d", bi.query, bi.autoIncrIdx)
 			}
 		} else {
-			_, err := e.Exec(bi.query, bi.args...)
+			_, err := e.ExecContext(ctx, bi.query, bi.args...)
 			if err != nil {
 				return err
 			}
 		}
 
 		if table.CanPostInsert {
-			err = ptr.(PostInserter).PostInsert(e)
+			err = ptr.(PostInserter).PostInsert(ctx, e)
 			if err != nil {
 				return err
 			}
@@ -359,10 +361,10 @@ func insert(m *DbMap, e SqlExecutor, list ...interface{}) error {
 	return nil
 }
 
-func lockError(m *DbMap, e SqlExecutor, tableName string, existingVer int64, elem reflect.Value, keys ...interface{}) (int64, error) {
+func lockError(ctx context.Context, m *DbMap, e SqlExecutor, tableName string, existingVer int64, elem reflect.Value, keys ...interface{}) (int64, error) {
 
 	dest := reflect.New(elem.Type()).Interface()
-	err := get(m, e, dest, keys...)
+	err := get(ctx, m, e, dest, keys...)
 	if err != nil {
 		return -1, err
 	}

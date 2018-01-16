@@ -12,6 +12,7 @@ package modl
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -145,14 +146,14 @@ func (m *DbMap) AddTableWithName(i interface{}, name string) *TableMap {
 
 // CreateTablesSql returns create table SQL as a map of table names to
 // their associated CREATE TABLE statements.
-func (m *DbMap) CreateTablesSql() (map[string]string, error) {
-	return m.createTables(false, false)
+func (m *DbMap) CreateTablesSql(ctx context.Context) (map[string]string, error) {
+	return m.createTables(ctx, false, false)
 }
 
 // CreateTablesIfNotExistsSql returns create table SQL as a map of table names to
 // their associated CREATE TABLE IF NOT EXISTS statements.
-func (m *DbMap) CreateTablesIfNotExistsSql() (map[string]string, error) {
-	return m.createTables(true, false)
+func (m *DbMap) CreateTablesIfNotExistsSql(ctx context.Context) (map[string]string, error) {
+	return m.createTables(ctx, true, false)
 }
 
 // CreateTables iterates through TableMaps registered to this DbMap and
@@ -160,16 +161,16 @@ func (m *DbMap) CreateTablesIfNotExistsSql() (map[string]string, error) {
 //
 // This is particularly useful in unit tests where you want to create
 // and destroy the schema automatically.
-func (m *DbMap) CreateTables() error {
-	_, err := m.createTables(false, true)
+func (m *DbMap) CreateTables(ctx context.Context) error {
+	_, err := m.createTables(ctx, false, true)
 	return err
 }
 
 // CreateTablesIfNotExists is similar to CreateTables, but starts
 // each statement with "create table if not exists" so that existing
 // tables do not raise errors.
-func (m *DbMap) CreateTablesIfNotExists() error {
-	_, err := m.createTables(true, true)
+func (m *DbMap) CreateTablesIfNotExists(ctx context.Context) error {
+	_, err := m.createTables(ctx, true, true)
 	return err
 }
 
@@ -197,7 +198,7 @@ func writeColumnSql(sql *bytes.Buffer, col *ColumnMap) {
 	}
 }
 
-func (m *DbMap) createTables(ifNotExists, exec bool) (map[string]string, error) {
+func (m *DbMap) createTables(ctx context.Context, ifNotExists, exec bool) (map[string]string, error) {
 	var err error
 	ret := map[string]string{}
 
@@ -244,7 +245,7 @@ func (m *DbMap) createTables(ifNotExists, exec bool) (map[string]string, error) 
 		}
 		s.WriteString(fmt.Sprintf(")%s;", m.Dialect.CreateTableSuffix()))
 		if exec {
-			_, err = m.Exec(s.String())
+			_, err = m.ExecContext(ctx, s.String())
 			if err != nil {
 				break
 			}
@@ -257,11 +258,11 @@ func (m *DbMap) createTables(ifNotExists, exec bool) (map[string]string, error) 
 
 // DropTables iterates through TableMaps registered to this DbMap and
 // executes "drop table" statements against the database for each.
-func (m *DbMap) DropTables() error {
+func (m *DbMap) DropTables(ctx context.Context) error {
 	var err error
 	for i := range m.tables {
 		table := m.tables[i]
-		_, e := m.Exec(fmt.Sprintf("drop table %s;", m.Dialect.QuoteField(table.TableName)))
+		_, e := m.ExecContext(ctx, fmt.Sprintf("drop table %s;", m.Dialect.QuoteField(table.TableName)))
 		if e != nil {
 			err = e
 		}
@@ -275,8 +276,8 @@ func (m *DbMap) DropTables() error {
 //
 // Hook functions PreInsert() and/or PostInsert() will be executed
 // before/after the INSERT statement if the interface defines them.
-func (m *DbMap) Insert(list ...interface{}) error {
-	return insert(m, m, list...)
+func (m *DbMap) InsertContext(ctx context.Context, list ...interface{}) error {
+	return insert(ctx, m, m, list...)
 }
 
 // Update runs a SQL UPDATE statement for each element in list.  List
@@ -289,8 +290,8 @@ func (m *DbMap) Insert(list ...interface{}) error {
 //
 // Returns an error if SetKeys has not been called on the TableMap or if
 // any interface in the list has not been registered with AddTable.
-func (m *DbMap) Update(list ...interface{}) (int64, error) {
-	return update(m, m, list...)
+func (m *DbMap) UpdateContext(ctx context.Context, list ...interface{}) (int64, error) {
+	return update(ctx, m, m, list...)
 }
 
 // Delete runs a SQL DELETE statement for each element in list.  List
@@ -303,8 +304,8 @@ func (m *DbMap) Update(list ...interface{}) (int64, error) {
 //
 // Returns an error if SetKeys has not been called on the TableMap or if
 // any interface in the list has not been registered with AddTable.
-func (m *DbMap) Delete(list ...interface{}) (int64, error) {
-	return deletes(m, m, list...)
+func (m *DbMap) DeleteContext(ctx context.Context, list ...interface{}) (int64, error) {
+	return deletes(ctx, m, m, list...)
 }
 
 // Get runs a SQL SELECT to fetch a single row from the table based on the
@@ -322,8 +323,8 @@ func (m *DbMap) Delete(list ...interface{}) (int64, error) {
 //
 // Returns an error if SetKeys has not been called on the TableMap or
 // if any interface in the list has not been registered with AddTable.
-func (m *DbMap) Get(dest interface{}, keys ...interface{}) error {
-	return get(m, m, dest, keys...)
+func (m *DbMap) GetContext(ctx context.Context, dest interface{}, keys ...interface{}) error {
+	return get(ctx, m, m, dest, keys...)
 }
 
 // Select runs an arbitrary SQL query, binding the columns in the result
@@ -347,19 +348,19 @@ func (m *DbMap) Get(dest interface{}, keys ...interface{}) error {
 // and nil returned.
 //
 // dest does NOT need to be registered with AddTable().
-func (m *DbMap) Select(dest interface{}, query string, args ...interface{}) error {
-	return hookedselect(m, m, dest, query, args...)
+func (m *DbMap) SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+	return hookedselect(ctx, m, m, dest, query, args...)
 }
 
 // SelectOne runs an arbitrary SQL Query, binding the columns in the result to
 // fields on the struct specified by dest.
-func (m *DbMap) SelectOne(dest interface{}, query string, args ...interface{}) error {
-	return hookedget(m, m, dest, query, args...)
+func (m *DbMap) SelectOneContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+	return hookedget(ctx, m, m, dest, query, args...)
 }
 
 // Exec runs an arbitrary SQL statement.  args represent the bind parameters.
 // This is equivalent to running Exec() using database/sql.
-func (m *DbMap) Exec(query string, args ...interface{}) (sql.Result, error) {
+func (m *DbMap) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	m.trace(query, args)
 	//stmt, err := m.Db.Prepare(query)
 	//if err != nil {
@@ -370,7 +371,7 @@ func (m *DbMap) Exec(query string, args ...interface{}) (sql.Result, error) {
 }
 
 // Begin starts a modl Transaction.
-func (m *DbMap) Begin() (*Transaction, error) {
+func (m *DbMap) BeginContext(ctx context.Context) (*Transaction, error) {
 	m.trace("begin;")
 	tx, err := m.Dbx.Beginx()
 	if err != nil {
@@ -420,17 +421,17 @@ func (m *DbMap) TableForType(t reflect.Type) *TableMap {
 }
 
 // TruncateTables truncates all tables in the DbMap.
-func (m *DbMap) TruncateTables() error {
-	return m.truncateTables(false)
+func (m *DbMap) TruncateTables(ctx context.Context) error {
+	return m.truncateTables(ctx, false)
 }
 
 // TruncateTablesIdentityRestart truncates all tables in the DbMap and
 // resets the identity counter.
-func (m *DbMap) TruncateTablesIdentityRestart() error {
-	return m.truncateTables(true)
+func (m *DbMap) TruncateTablesIdentityRestart(ctx context.Context) error {
+	return m.truncateTables(ctx, true)
 }
 
-func (m *DbMap) truncateTables(restartIdentity bool) error {
+func (m *DbMap) truncateTables(ctx context.Context, restartIdentity bool) error {
 	var err error
 	var restartClause string
 	for i := range m.tables {
@@ -443,17 +444,17 @@ func (m *DbMap) truncateTables(restartIdentity bool) error {
 		// additional query to run after we truncate.  This is true with MySQL and
 		// SQLite, which do not have extra clauses for this during table truncation.
 		if len(restartClause) > 0 && restartClause[0] == ';' {
-			_, err = m.Exec(fmt.Sprintf("%s %s;", m.Dialect.TruncateClause(),
+			_, err = m.ExecContext(ctx, fmt.Sprintf("%s %s;", m.Dialect.TruncateClause(),
 				m.Dialect.QuoteField(table.TableName)))
 			if err != nil {
 				return err
 			}
-			_, err = m.Exec(restartClause[1:])
+			_, err = m.ExecContext(ctx, restartClause[1:])
 			if err != nil {
 				return err
 			}
 		} else {
-			_, err := m.Exec(fmt.Sprintf("%s %s %s;", m.Dialect.TruncateClause(), m.Dialect.QuoteField(table.TableName), restartClause))
+			_, err := m.ExecContext(ctx, fmt.Sprintf("%s %s %s;", m.Dialect.TruncateClause(), m.Dialect.QuoteField(table.TableName), restartClause))
 			if err != nil {
 				return err
 			}

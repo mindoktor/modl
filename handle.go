@@ -4,6 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/jmoiron/sqlx"
+	"context"
 )
 
 // a cursor is either an sqlx.Db or an sqlx.Tx
@@ -13,10 +14,12 @@ type handle interface {
 	Queryx(query string, args ...interface{}) (*sqlx.Rows, error)
 	QueryRowx(query string, args ...interface{}) *sqlx.Row
 	Exec(query string, args ...interface{}) (sql.Result, error)
-	/*
-		Query(query string, args ...interface{}) (*sql.Rows, error)
-		QueryRow(query string, args ...interface{}) *sql.Row
-	*/
+
+	SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+	GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+	QueryxContext(ctx context.Context, query string, args ...interface{}) (*sqlx.Rows, error)
+	QueryRowxContext(ctx context.Context, query string, args ...interface{}) *sqlx.Row
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 }
 
 // an implmentation of handle which traces using dbmap
@@ -48,4 +51,29 @@ func (t *tracingHandle) QueryRowx(query string, args ...interface{}) *sqlx.Row {
 func (t *tracingHandle) Exec(query string, args ...interface{}) (sql.Result, error) {
 	t.d.trace(query, args...)
 	return t.h.Exec(query, args...)
+}
+
+func (t *tracingHandle) SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+	t.d.trace(query, args...)
+	return t.h.SelectContext(ctx, dest, query, args...)
+}
+
+func (t *tracingHandle) GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+	t.d.trace(query, args...)
+	return t.h.GetContext(ctx, dest, query, args...)
+}
+
+func (t *tracingHandle) QueryxContext(ctx context.Context, query string, args ...interface{}) (*sqlx.Rows, error) {
+	t.d.trace(query, args...)
+	return t.h.QueryxContext(ctx, query, args...)
+}
+
+func (t *tracingHandle) QueryRowxContext(ctx context.Context, query string, args ...interface{}) *sqlx.Row {
+	t.d.trace(query, args...)
+	return t.h.QueryRowxContext(ctx, query, args...)
+}
+
+func (t *tracingHandle) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	t.d.trace(query, args...)
+	return t.h.ExecContext(ctx, query, args...)
 }
