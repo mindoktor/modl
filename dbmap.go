@@ -19,8 +19,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
-	"github.com/jmoiron/sqlx/reflectx"
+	"mindoktor.io/sqlx"
+	"mindoktor.io/sqlx/reflectx"
 )
 
 // TableNameMapper is the function used by AddTable to map struct names to database table names, in analogy

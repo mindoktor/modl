@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/jmoiron/sqlx"
-	"github.com/jmoiron/sqlx/reflectx"
+	"mindoktor.io/sqlx"
+	"mindoktor.io/sqlx/reflectx"
 )
 
 // TableMap represents a mapping between a Go struct and a database table

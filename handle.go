@@ -3,7 +3,7 @@ package modl
 import (
 	"database/sql"
 
-	"github.com/jmoiron/sqlx"
+	"mindoktor.io/sqlx"
 	"context"
 )
 
